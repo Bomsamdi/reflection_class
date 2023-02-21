@@ -3,8 +3,11 @@ import 'package:reflection_class/reflection_class.dart';
 
 void main() {
   ReflectionClass.instance.registerClassWithParam<Example, int>(
-    (param) => Example(a: param),
-  );
+      (param) => Example(a: param),
+      instanceName: "example");
+  ReflectionClass.instance.registerClassWithParam<Example, int>(
+      (param) => Example.test(param),
+      instanceName: "exampleTest");
 
   ReflectionClass.instance.registerClass<Example2>(
     () => Example2(),
@@ -61,10 +64,16 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    Example a = ReflectionClass.instance.createObject<Example>(param: 1);
+    Example a = ReflectionClass.instance
+        .createObject<Example>(param: 1, instanceName: "example");
     print(a.a);
+    Example b = ReflectionClass.instance
+        .createObject<Example>(param: 1, instanceName: "exampleTest");
+    print(b.a);
     Example2 e = ReflectionClass.instance.createObject<Example2>();
     print(e);
+    Example2 g = ReflectionClass.instance<Example2>();
+    print(g);
   }
 
   void _incrementCounter() {
@@ -134,6 +143,7 @@ class _MyHomePageState extends State<MyHomePage> {
 class Example {
   final int a;
   Example({required this.a});
+  Example.test(int x) : a = x * 10;
 }
 
 class Example2 {}

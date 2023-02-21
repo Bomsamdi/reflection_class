@@ -2,24 +2,14 @@ library reflection_class;
 
 import 'dart:async';
 
-import 'package:async/async.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 
 part 'reflection_class_impl.dart';
 
-/// If your singleton that you register wants to use the manually signalling
-/// of its ready state, it can implement this interface class instead of using
-/// the [signalsReady] parameter of the registration functions
-/// (you don't really have to implement much ;-) )
-abstract class WillSignalReady {}
-
-/// If an object implements the [ShadowChangeHandler] if will get notified if
+/// [ShadowHandler] helps to hendle when
 /// an Object with the same registration type and name is registered on a
 /// higher scope which will shadow it.
-/// It also will get notified if the shadowing object is removed from ReflectionClass
-///
-/// This can be helpful to unsubscribe / resubscribe from Streams or Listenables
-abstract class ShadowChangeHandlers {
+abstract class ShadowHandler {
   void onGetShadowed(Object shadowing);
   void onLeaveShadow(Object shadowing);
 }
@@ -31,85 +21,23 @@ abstract class Disposable {
   FutureOr onDispose();
 }
 
-/// Signature of the class function used by non async factories
+/// Class function used by class constructors without params
 typedef ClassFunc<T> = T Function();
 
-/// For Factories that expect parameters pass it in param in custom type
+/// Class function used by class constructors with params
 typedef ClassFuncParam<T, PARAM> = T Function(
   PARAM param,
 );
 
-/// Signature for disposing function
-/// because closures like `(x){}` have a return type of Null we don't use `FutureOr<void>`
+/// Disposing function signature
 typedef DisposingFunc<T> = FutureOr Function(T param);
 
-/// Signature for disposing function on scope level
+/// Disposing function signature on scope level
 typedef ScopeDisposeFunc = FutureOr Function();
 
-/// Data structure used to identify a dependency by type and instanceName
-class InitDependency extends Type {
-  final Type type;
-  final String? instanceName;
-
-  InitDependency(this.type, {this.instanceName});
-
-  @override
-  String toString() => "InitDependency(type:$type, instanceName:$instanceName)";
-}
-
-class WaitingTimeOutException implements Exception {
-  /// In case of a timeout while waiting for an instance to get ready
-  /// This exception is thrown with information about who is still waiting.
-  ///
-  /// If you pass the [callee] parameter to [isReady], or define dependent Singletons
-  /// this maps lists which callees are waiting for whom.
-  final Map<String, List<String>> areWaitedBy;
-
-  /// Lists with Types that are still not ready.
-  final List<String> notReadyYet;
-
-  /// Lists with Types that are already ready.
-  final List<String> areReady;
-
-  WaitingTimeOutException(
-    this.areWaitedBy,
-    this.notReadyYet,
-    this.areReady,
-  );
-
-  @override
-  String toString() {
-    // ignore: avoid_print
-    print(
-        'ReflectionClass: There was a timeout while waiting for an instance to signal ready');
-    // ignore: avoid_print
-    print('The following instance types where waiting for completion');
-    for (final entry in areWaitedBy.entries) {
-      // ignore: avoid_print
-      print('${entry.value} is waiting for ${entry.key}');
-    }
-    // ignore: avoid_print
-    print('The following instance types have NOT signalled ready yet');
-    for (final entry in notReadyYet) {
-      // ignore: avoid_print
-      print(entry);
-    }
-    // ignore: avoid_print
-    print('The following instance types HAVE signalled ready yet');
-    for (final entry in areReady) {
-      // ignore: avoid_print
-      print(entry);
-    }
-    return super.toString();
-  }
-}
-
-/// Very simple and easy to use service locator
-/// You register your object creation factory or an instance of an object with [registerClass]
-/// And retrieve the desired object using [get] or call your locator as function as its a
+/// You register your classes with [registerClass]
+/// And retrieve the desired object using [createObject] or call your locator as function as its a
 /// callable class
-/// Additionally ReflectionClass offers asynchronous creation functions as well as functions to synchronize
-/// the async initialization of multiple Singletons
 abstract class ReflectionClass {
   static final ReflectionClass _instance = _ReflectionClassImplementation();
 
@@ -121,12 +49,6 @@ abstract class ReflectionClass {
 
   /// access to the Singleton instance of ReflectionClass
   static ReflectionClass get instance => _instance;
-
-  /// If you need more than one instance of ReflectionClass you can use [asNewInstance()]
-  /// You should prefer to use the `instance()` method to access the global instance of [ReflectionClass].
-  factory ReflectionClass.asNewInstance() {
-    return _ReflectionClassImplementation();
-  }
 
   /// By default it's not allowed to register a type a second time.
   /// If you really need to you can disable the asserts by setting[allowReassignment]= true
@@ -141,26 +63,17 @@ abstract class ReflectionClass {
     dynamic param,
   });
 
-  /// creates an instance of a registered type [T] depending on the registration
-  /// function used for this type or based on a name.
-  /// for constructors that have params you can pass it in [param] they have to match the types
-  /// given at registration with [registerClassWithParam()]
-  T get<T extends Object>({
-    String? instanceName,
-    dynamic param,
-  });
-
   /// Callable class so that you can write `ReflectionClass.instance<MyType>` instead of
-  /// `ReflectionClass.instance.get<MyType>`
+  /// `ReflectionClass.instance.createObject<MyType>`
   T call<T extends Object>({
     String? instanceName,
     dynamic param,
   });
 
-  /// registers a type so that a new instance will be created on each call of [get] on that type
+  /// registers a type so that a new instance will be created on each call of [createObject] on that type
   /// [T] type to register
   /// [ClassFunc] class function for this type
-  /// [instanceName] if you provide a value here your factory gets registered with that
+  /// [instanceName] if you provide a value here your class gets registered with that
   /// name instead of a type. This should only be necessary if you need to register more
   /// than one instance of one type. Its highly not recommended.
   void registerClass<T extends Object>(
@@ -168,7 +81,7 @@ abstract class ReflectionClass {
     String? instanceName,
   });
 
-  /// registers a type so that a new instance will be created on each call of [get] on that type
+  /// registers a type so that a new instance will be created on each call of [createObject] on that type
   /// based on up to two parameters provided to [get()]
   /// [T] type to register
   /// [PARAM] type of param
@@ -179,13 +92,8 @@ abstract class ReflectionClass {
   /// than one instance of one type. Its highly not recommended.
   ///
   /// example:
-  ///    ReflectionClass.registerClassWithParam<TestClassParam,String,int>((s,i)
-  ///        => TestClassParam(param:s, param2: i));
-  ///
-  /// if you only use one parameter:
-  ///
-  ///    ReflectionClass.registerClassWithParam<TestClassParam,String,void>((s,_)
-  ///        => TestClassParam(param:s);
+  ///    ReflectionClass.registerClassWithParam<TestClassParam,String>((s)
+  ///        => TestClassParam(param:s));
   void registerClassWithParam<T extends Object, PARAM>(
     ClassFuncParam<T, PARAM> classFunc, {
     String? instanceName,
@@ -252,65 +160,4 @@ abstract class ReflectionClass {
     String? instanceName,
     FutureOr Function(T)? disposingFunction,
   });
-
-  /// returns a Future that completes if all asynchronously created Singletons and any
-  /// Singleton that had [signalsReady==true] are ready.
-  /// This can be used inside a FutureBuilder to change the UI as soon as all initialization
-  /// is done
-  /// If you pass a [timeout], a [WaitingTimeOutException] will be thrown if not all Singletons
-  /// were ready in the given time. The Exception contains details on which Singletons are not
-  /// ready yet. if [allReady] should not wait for the completion of async Singletons set
-  /// [ignorePendingAsyncCreation==true]
-  Future<void> allReady({
-    Duration? timeout,
-    bool ignorePendingAsyncCreation = false,
-  });
-
-  /// Returns a Future that completes if the instance of a Singleton, defined by Type [T] or
-  /// by name [instanceName] or by passing an existing [instance], is ready
-  /// If you pass a [timeout], a [WaitingTimeOutException] will be thrown if the instance
-  /// is not ready in the given time. The Exception contains details on which Singletons are
-  /// not ready at that time.
-  /// [callee] optional parameter which makes debugging easier. Pass `this` in here.
-  Future<void> isReady<T extends Object>({
-    Object? instance,
-    String? instanceName,
-    Duration? timeout,
-    Object? callee,
-  });
-
-  /// Checks if an async Singleton defined by an [instance], a type [T] or an [instanceName]
-  /// is ready without waiting
-  bool isReadySync<T extends Object>({
-    Object? instance,
-    String? instanceName,
-  });
-
-  /// Returns if all async Singletons are ready without waiting
-  /// if [allReady] should not wait for the completion of async Singletons set
-  /// [ignorePendingAsyncCreation==true]
-  // ignore: avoid_positional_boolean_parameters
-  bool allReadySync([bool ignorePendingAsyncCreation = false]);
-
-  /// Used to manually signal the ready state of a Singleton.
-  /// If you want to use this mechanism you have to pass [signalsReady==true] when registering
-  /// the Singleton.
-  /// If [instance] has a value ReflectionClass will search for the responsible Singleton
-  /// and completes all futures that might be waited for by [isReady]
-  /// If all waiting singletons have signalled ready the future you can get
-  /// from [allReady] is automatically completed
-  ///
-  /// Typically this is used in this way inside the registered objects init
-  /// method `ReflectionClass.instance.signalReady(this);`
-  ///
-  /// if [instance] is `null` and no factory/singleton is waiting to be signalled this
-  /// will complete the future you got from [allReady], so it can be used to globally
-  /// giving a ready Signal
-  ///
-  /// Both ways are mutually exclusive, meaning either only use the global `signalReady()` and
-  /// don't register a singleton to signal ready or use any async registrations
-  ///
-  /// Or use async registrations methods or let individual instances signal their ready
-  /// state on their own.
-  void signalReady(Object? instance);
 }
