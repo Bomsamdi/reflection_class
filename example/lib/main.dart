@@ -61,7 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    Example a = ReflectionClass.instance.get<Example>(param: 1);
+    Example a = ReflectionClass.instance.createObject<Example>(param: 1);
     print(a.a);
     Example2 e = ReflectionClass.instance.createObject<Example2>();
     print(e);

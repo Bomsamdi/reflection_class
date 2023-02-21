@@ -34,8 +34,7 @@ abstract class Disposable {
 /// Signature of the class function used by non async factories
 typedef ClassFunc<T> = T Function();
 
-/// For Factories that expect up to two parameters if you need only one use `void` for the one
-/// you don't use
+/// For Factories that expect parameters pass it in param in custom type
 typedef ClassFuncParam<T, PARAM> = T Function(
   PARAM param,
 );
@@ -77,8 +76,6 @@ class WaitingTimeOutException implements Exception {
     this.notReadyYet,
     this.areReady,
   );
-
-  // todo : assert(areWaitedBy != null && notReadyYet != null && areReady != null);
 
   @override
   String toString() {
@@ -135,14 +132,18 @@ abstract class ReflectionClass {
   /// If you really need to you can disable the asserts by setting[allowReassignment]= true
   bool allowReassignment = false;
 
+  /// creates an instance of a registered type [T] depending on the registration
+  /// function used for this type or based on a name.
+  /// for constructors that have params you can pass it in [param] they have to match the types
+  /// given at registration with [registerClassWithParam()]
   T createObject<T extends Object>({
     String? instanceName,
     dynamic param,
   });
 
-  /// retrieves or creates an instance of a registered type [T] depending on the registration
+  /// creates an instance of a registered type [T] depending on the registration
   /// function used for this type or based on a name.
-  /// for factories you can pass up to 2 parameters [param,param2] they have to match the types
+  /// for constructors that have params you can pass it in [param] they have to match the types
   /// given at registration with [registerClassWithParam()]
   T get<T extends Object>({
     String? instanceName,

@@ -12,23 +12,8 @@ void throwIfNot(bool condition, Object error) {
   if (!condition) throw error;
 }
 
-/// You will see a rather esoteric looking test `(const Object() is! T)` at several places
-/// /// it tests if [T] is a real type and not Object or dynamic
-/// For each registered factory/singleton a [_ServiceFactory<T>] is created
-/// it holds either the instance of a Singleton or/and the creation functions
-/// for creating an instance when [get] is called
-///
-/// There are three different types
-enum _ServiceFactoryType {
-  alwaysNew,
-  constant, // normal singleton
-  lazy, // lazy
-}
-
 /// If I use `Singleton` without specifier in the comments I mean normal and lazy
 class _ServiceFactory<T extends Object, PARAM> {
-  final _ServiceFactoryType factoryType;
-
   final _ReflectionClassImplementation _reflectionClassInstance;
   final _Scope registrationScope;
 
@@ -73,8 +58,7 @@ class _ServiceFactory<T extends Object, PARAM> {
   final bool shouldSignalReady;
 
   _ServiceFactory(
-    this._reflectionClassInstance,
-    this.factoryType, {
+    this._reflectionClassInstance, {
     this.creationFunction,
     this.creationFunctionParam,
     this.instance,
@@ -114,49 +98,13 @@ class _ServiceFactory<T extends Object, PARAM> {
     }
   }
 
-  /// returns an instance depending on the type of the registration if [async==false]
+  /// returns an instance depending on the type of the registration
   T getObject(dynamic param) {
-    assert(!(factoryType != _ServiceFactoryType.alwaysNew && (param != null)),
-        'You can only pass parameters to factories!');
-
     try {
-      switch (factoryType) {
-        case _ServiceFactoryType.alwaysNew:
-          if (creationFunctionParam != null) {
-            // param.runtimeType == paramType should use 'is' but Dart does
-            // not support this comparison. For the time being it is therefore
-            // disabled
-            // assert(
-            //     param == null || param.runtimeType == paramType,
-            //     'Incompatible Type passed as param\n'
-            //     'expected: $paramType actual: ${param.runtimeType}');
-            return creationFunctionParam!(param as PARAM);
-          } else {
-            return creationFunction!();
-          }
-        case _ServiceFactoryType.constant:
-          return instance as T;
-        case _ServiceFactoryType.lazy:
-          if (instance == null) {
-            instance = creationFunction!();
-            objectsWaiting.clear();
-            _readyCompleter.complete(instance as T);
-
-            /// check if we are shadowing an existing Object
-            final factoryThatWouldbeShadowed = _reflectionClassInstance
-                ._findFirstFactoryByNameAndTypeOrNull(instanceName,
-                    type: T, lookInScopeBelow: true);
-
-            final objectThatWouldbeShadowed =
-                factoryThatWouldbeShadowed?.instance;
-            if (objectThatWouldbeShadowed != null &&
-                objectThatWouldbeShadowed is ShadowChangeHandlers) {
-              objectThatWouldbeShadowed.onGetShadowed(instance!);
-            }
-          }
-          return instance as T;
-        default:
-          throw StateError('Impossible factoryType');
+      if (creationFunctionParam != null) {
+        return creationFunctionParam!(param as PARAM);
+      } else {
+        return creationFunction!();
       }
     } catch (e, s) {
       // ignore: avoid_print
@@ -292,12 +240,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
 
     Object instance = Object; //late
     if (instanceFactory.pendingResult != null) {
-      /// We use an assert here instead of an `if..throw` for performance reasons
-      assert(
-        instanceFactory.factoryType == _ServiceFactoryType.constant ||
-            instanceFactory.factoryType == _ServiceFactoryType.lazy,
-        "You can't use get with an async Factory of ${instanceName ?? T.toString()}.",
-      );
       assert(
         instanceFactory.isReady,
         'You tried to access an instance of ${instanceName ?? T.toString()} that is not ready yet',
@@ -339,7 +281,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
     String? instanceName,
   }) {
     _register<T, void>(
-      type: _ServiceFactoryType.alwaysNew,
       instanceName: instanceName,
       classFunc: classFunc,
       shouldSignalReady: false,
@@ -370,7 +311,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
     String? instanceName,
   }) {
     _register<T, PARAM>(
-        type: _ServiceFactoryType.alwaysNew,
         instanceName: instanceName,
         classFuncParam: classFunc,
         shouldSignalReady: false);
@@ -467,7 +407,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
   String? get currentScopeName => _currentScope.name;
 
   void _register<T extends Object, PARAM>({
-    required _ServiceFactoryType type,
     ClassFunc<T>? classFunc,
     ClassFuncParam<T, PARAM>? classFuncParam,
     T? instance,
@@ -508,7 +447,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
 
     final serviceFactory = _ServiceFactory<T, PARAM>(
       this,
-      type,
       registrationScope: _currentScope,
       creationFunction: classFunc,
       creationFunctionParam: classFuncParam,
@@ -523,106 +461,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
       () => <Type, _ServiceFactory<Object, dynamic>>{},
     );
     factoriesByName[instanceName]![T] = serviceFactory;
-
-    // simple Singletons get are already created, nothing else has to be done
-    if (type == _ServiceFactoryType.constant &&
-        !shouldSignalReady &&
-        (dependsOn?.isEmpty ?? true)) {
-      return;
-    }
-
-    // if it's an async or a dependent Singleton we start its creation function here after we check if
-    // it is dependent on other registered Singletons.
-    if (((dependsOn?.isNotEmpty ?? false)) &&
-        type == _ServiceFactoryType.constant) {
-      /// Any client awaiting the completion of this Singleton
-      /// Has to wait for the completion of the Singleton itself as well
-      /// as for the completion of all the Singletons this one depends on
-      /// For this we use [outerFutureGroup]
-      /// A `FutureGroup` completes only if it's closed and all contained
-      /// Futures have completed
-      final outerFutureGroup = FutureGroup();
-      Future dependentFuture;
-
-      if (dependsOn?.isNotEmpty ?? false) {
-        /// To wait for the completion of all Singletons this one is depending on
-        /// before we start to create itself we use [dependentFutureGroup]
-        final dependentFutureGroup = FutureGroup();
-
-        for (final dependency in dependsOn!) {
-          late final _ServiceFactory<Object, dynamic>? dependentFactory;
-          if (dependency is InitDependency) {
-            dependentFactory = _findFirstFactoryByNameAndTypeOrNull(
-                dependency.instanceName,
-                type: dependency.type);
-          } else {
-            dependentFactory =
-                _findFirstFactoryByNameAndTypeOrNull(null, type: dependency);
-          }
-          throwIf(
-              dependentFactory == null,
-              ArgumentError(
-                  'Dependent Type $dependency is not registered in ReflectionClass'));
-          throwIfNot(
-            dependentFactory!.canBeWaitedFor,
-            ArgumentError(
-                'Dependent Type $dependency is not an async Singleton'),
-          );
-          dependentFactory.objectsWaiting.add(serviceFactory.registrationType);
-          dependentFutureGroup.add(dependentFactory._readyCompleter.future);
-        }
-        dependentFutureGroup.close();
-
-        dependentFuture = dependentFutureGroup.future;
-      } else {
-        /// if we have no dependencies we still create a dummy Future so that
-        /// we can use the same code path further down
-        dependentFuture = Future.sync(() {}); // directly execute then
-      }
-      outerFutureGroup.add(dependentFuture);
-
-      /// if someone uses getAsync on an async Singleton that has not be started to get created
-      /// because its dependent on other objects this doesn't work because [pendingResult] is
-      /// not set in that case. Therefore we have to set [outerFutureGroup] as [pendingResult]
-      dependentFuture.then((_) {
-        Future<T> isReadyFuture;
-
-        /// SingletonWithDependencies
-        serviceFactory.instance = classFunc!();
-
-        /// check if we are shadowing an existing Object
-        final factoryThatWouldbeShadowed = _findFirstFactoryByNameAndTypeOrNull(
-            instanceName,
-            type: T,
-            lookInScopeBelow: true);
-
-        final objectThatWouldbeShadowed = factoryThatWouldbeShadowed?.instance;
-        if (objectThatWouldbeShadowed != null &&
-            objectThatWouldbeShadowed is ShadowChangeHandlers) {
-          objectThatWouldbeShadowed.onGetShadowed(serviceFactory.instance!);
-        }
-
-        if (!serviceFactory.shouldSignalReady) {
-          /// As this isn't an async function we declare it as ready here
-          /// if wasn't marked that it will signalReady
-          isReadyFuture = Future<T>.value(serviceFactory.instance as T);
-          serviceFactory._readyCompleter.complete(serviceFactory.instance as T);
-          serviceFactory.objectsWaiting.clear();
-        } else {
-          isReadyFuture = serviceFactory._readyCompleter.future;
-        }
-        outerFutureGroup.add(isReadyFuture);
-        outerFutureGroup.close();
-      });
-
-      /// outerFutureGroup.future returns a Future<List> and not a Future<T>
-      /// As we know that the actual class function was added last to the FutureGroup
-      /// we just use that one
-      serviceFactory.pendingResult =
-          outerFutureGroup.future.then((completedFutures) {
-        return completedFutures.last as T;
-      });
-    }
   }
 
   /// Tests if an [instance] of an object or aType [T] or a name [instanceName]
@@ -785,8 +623,7 @@ class _ReflectionClassImplementation implements ReflectionClass {
             (!ignorePendingAsyncCreation ||
                 (x.pendingResult != null) || // Singletons with dependencies
                 x.shouldSignalReady) &&
-            !x.isReady &&
-            x.factoryType == _ServiceFactoryType.constant)
+            !x.isReady)
         .forEach((f) {
       if (f.pendingResult != null) {
         futures.add(f.pendingResult!);
@@ -816,11 +653,9 @@ class _ReflectionClassImplementation implements ReflectionClass {
     final notReadyTypes = _allFactories
         .where((x) =>
             (!ignorePendingAsyncCreation ||
-                    (x.pendingResult != null) || // Singletons with dependencies
-                    x.shouldSignalReady) &&
-                !x.isReady &&
-                x.factoryType == _ServiceFactoryType.constant ||
-            x.factoryType == _ServiceFactoryType.lazy)
+                (x.pendingResult != null) || // Singletons with dependencies
+                x.shouldSignalReady) &&
+            !x.isReady)
         .map<String>((x) {
       if (x.isNamedRegistration) {
         return 'Object ${x.instanceName} has not completed';
@@ -894,8 +729,7 @@ class _ReflectionClassImplementation implements ReflectionClass {
       factoryToCheck = _findFactoryByNameAndType<T>(instanceName);
     }
     throwIfNot(
-      factoryToCheck.canBeWaitedFor &&
-          factoryToCheck.factoryType != _ServiceFactoryType.alwaysNew,
+      factoryToCheck.canBeWaitedFor,
       ArgumentError(
           'You only can use this function on Singletons that are async, that are marked as '
           'dependent or that are marked with "signalsReady==true"'),
@@ -922,8 +756,7 @@ class _ReflectionClassImplementation implements ReflectionClass {
       factoryToCheck = _findFactoryByNameAndType<T>(instanceName);
     }
     throwIfNot(
-      factoryToCheck.canBeWaitedFor &&
-          factoryToCheck.factoryType != _ServiceFactoryType.alwaysNew,
+      factoryToCheck.canBeWaitedFor,
       ArgumentError(
           'You only can use this function on async Singletons or Singletons '
           'that have ben marked with "signalsReady" or that they depend on others'),
