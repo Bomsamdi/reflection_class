@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:reflection_class/reflection_class.dart';
 
 void main() {
+  ReflectionClass.instance.registerClassWithParam<Example, int>(
+    (param) => Example(a: param),
+  );
+
+  ReflectionClass.instance.registerClass<Example2>(
+    () => Example2(),
+  );
   runApp(const MyApp());
 }
 
@@ -49,6 +57,15 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    Example a = ReflectionClass.instance.get<Example>(param: 1);
+    print(a.a);
+    Example2 e = ReflectionClass.instance.createObject<Example2>();
+    print(e);
+  }
 
   void _incrementCounter() {
     setState(() {
@@ -113,3 +130,10 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 }
+
+class Example {
+  final int a;
+  Example({required this.a});
+}
+
+class Example2 {}
