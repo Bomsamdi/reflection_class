@@ -74,6 +74,11 @@ class _MyHomePageState extends State<MyHomePage> {
     print(e);
     Example2 g = ReflectionClass.instance<Example2>();
     print(g);
+    Example3 example3 = Example3(example: Example(a: 1), example2: Example2());
+    print(example3<Example>().a);
+    print(example3("test"));
+    print(example3("test2"));
+    print(example3<Example3>());
   }
 
   void _incrementCounter() {
@@ -147,3 +152,35 @@ class Example {
 }
 
 class Example2 {}
+
+class Example3 with Callable {
+  final Example2 example2;
+  final Example example;
+  String test = "TEST";
+
+  @override
+  Map<String, dynamic> get callableProperties => {
+        'example': example,
+        'example2': example2,
+        'test': test,
+      };
+
+  Example3({
+    required this.example,
+    required this.example2,
+  });
+}
+
+abstract class Callable {
+  Map<String, dynamic> get callableProperties;
+
+  call<T extends Object>([dynamic name]) {
+    if (name != null) {
+      return callableProperties[name];
+    }
+    return callableProperties.values.firstWhere(
+      (element) => element.runtimeType == T,
+      orElse: () => null,
+    );
+  }
+}

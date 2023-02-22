@@ -1,5 +1,8 @@
 library reflection_class;
 
+//  Created by Bomsamdi on 2023
+//  Copyright © 2023 Bomsamdi. All rights reserved.
+
 import 'dart:async';
 
 import 'package:collection/collection.dart' show IterableExtension;

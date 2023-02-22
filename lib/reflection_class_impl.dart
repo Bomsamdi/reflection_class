@@ -1,5 +1,8 @@
 part of 'reflection_class.dart';
 
+//  Created by Bomsamdi on 2023
+//  Copyright © 2023 Bomsamdi. All rights reserved.
+
 /// Two handy functions that help me to express my intention clearer and shorter to check for runtime
 /// errors
 // ignore: avoid_positional_boolean_parameters
@@ -12,7 +15,7 @@ void throwIfNot(bool condition, Object error) {
   if (!condition) throw error;
 }
 
-class _ServiceFactory<T extends Object, PARAM> {
+class _ServiceClass<T extends Object, PARAM> {
   final _ReflectionClassImplementation _reflectionClassInstance;
   final _Scope registrationScope;
 
@@ -36,13 +39,9 @@ class _ServiceFactory<T extends Object, PARAM> {
   /// the type that was used when registering, used for runtime checks
   late final Type registrationType;
 
-  /// If other objects are waiting for this one
-  /// they are stored here
-  final List<Type> objectsWaiting = [];
-
   bool get isNamedRegistration => instanceName != null;
 
-  _ServiceFactory(
+  _ServiceClass(
     this._reflectionClassInstance, {
     this.creationFunction,
     this.creationFunctionParam,
@@ -95,7 +94,7 @@ class _Scope {
   final String? name;
   final ScopeDisposeFunc? disposeFunc;
   final factoriesByName =
-      <String?, Map<Type, _ServiceFactory<Object, dynamic>>>{};
+      <String?, Map<Type, _ServiceClass<Object, dynamic>>>{};
 
   _Scope({this.name, this.disposeFunc});
 
@@ -108,8 +107,8 @@ class _Scope {
     factoriesByName.clear();
   }
 
-  List<_ServiceFactory> get allClasses => factoriesByName.values
-      .fold<List<_ServiceFactory>>([], (sum, x) => sum..addAll(x.values));
+  List<_ServiceClass> get allClasses => factoriesByName.values
+      .fold<List<_ServiceClass>>([], (sum, x) => sum..addAll(x.values));
 
   Future<void> dispose() async {
     await disposeFunc?.call();
@@ -130,8 +129,8 @@ class _ReflectionClassImplementation implements ReflectionClass {
   @override
   bool allowReassignment = true;
 
-  /// Is used by several other functions to retrieve the correct [_ServiceFactory]
-  _ServiceFactory<T, dynamic>?
+  /// Is used by several other functions to retrieve the correct [_ServiceClass]
+  _ServiceClass<T, dynamic>?
       _findFirstClassByNameAndTypeOrNull<T extends Object>(String? instanceName,
           {Type? type, bool lookInScopeBelow = false}) {
     /// We use an assert here instead of an `if..throw` because it gets called on every call
@@ -144,7 +143,7 @@ class _ReflectionClassImplementation implements ReflectionClass {
       'instead of var sl=ReflectionClass.instance;',
     );
 
-    _ServiceFactory<T, dynamic>? instanceFactory;
+    _ServiceClass<T, dynamic>? instanceFactory;
 
     int scopeLevel = _scopes.length - (lookInScopeBelow ? 2 : 1);
 
@@ -152,14 +151,14 @@ class _ReflectionClassImplementation implements ReflectionClass {
       final factoryByTypes = _scopes[scopeLevel].factoriesByName[instanceName];
       if (type == null) {
         instanceFactory = factoryByTypes != null
-            ? factoryByTypes[T] as _ServiceFactory<T, dynamic>?
+            ? factoryByTypes[T] as _ServiceClass<T, dynamic>?
             : null;
       } else {
         /// in most cases we can rely on the generic type T because it is passed
         /// in by callers. In case of dependent types this does not work as these types
         /// are dynamic
         instanceFactory = factoryByTypes != null
-            ? factoryByTypes[type] as _ServiceFactory<T, dynamic>?
+            ? factoryByTypes[type] as _ServiceClass<T, dynamic>?
             : null;
       }
       scopeLevel--;
@@ -168,8 +167,8 @@ class _ReflectionClassImplementation implements ReflectionClass {
     return instanceFactory;
   }
 
-  /// Is used by several other functions to retrieve the correct [_ServiceFactory]
-  _ServiceFactory _findClassByNameAndType<T extends Object>(
+  /// Is used by several other functions to retrieve the correct [_ServiceClass]
+  _ServiceClass _findClassByNameAndType<T extends Object>(
     String? instanceName, [
     Type? type,
   ]) {
@@ -178,7 +177,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
 
     assert(
       instanceFactory != null,
-      // ignore: missing_whitespace_between_adjacent_strings
       'Object/factory with ${instanceName != null ? 'with name $instanceName and ' : ''}'
       'type ${T.toString()} is not registered inside ReflectionClass. '
       '\n(Did you accidentally do ReflectionClass sl=ReflectionClass.instance(); instead of ReflectionClass sl=ReflectionClass.instance;'
@@ -221,12 +219,13 @@ class _ReflectionClassImplementation implements ReflectionClass {
     return createObject<T>(instanceName: instanceName, param: param);
   }
 
-  /// registers a type so that a new instance will be created on each call of [get] on that type
+  /// Method for registeration a type, when you need new instance of registeration class you
+  /// should call [createObject] or execute callable class on that type
   /// [T] type to register
   /// [ClassFunc] class function for this type
-  /// [instanceName] if you provide a value here your factory gets registered with that
-  /// name instead of a type. This should only be necessary if you need to register more
-  /// than one instance of one type. It's highly not recommended.
+  /// If [instanceName] != null your class gets registered with that
+  /// name. You will provide value of [instanceName] only when you need to register more
+  /// than one instance of one type.
   @override
   void registerClass<T extends Object>(
     ClassFunc<T> classFunc, {
@@ -238,24 +237,18 @@ class _ReflectionClassImplementation implements ReflectionClass {
     );
   }
 
-  /// registers a type so that a new instance will be created on each call of [get] on that
-  /// type based on up to two parameters provided to [get()]
+  /// Method for registeration a type, when you need new instance of registeration class you
+  /// should call [createObject] or execute callable class on that type
   /// [T] type to register
-  /// [PARAM] type of param
-  /// if you use only one parameter pass void here
-  /// [ClassFunc] class function for this type that accepts two parameters
-  /// [instanceName] if you provide a value here your factory gets registered with that
-  /// name instead of a type. This should only be necessary if you need to register more
-  /// than one instance of one type. It's highly not recommended.
-  ///
-  /// example:
+  /// [ClassFunc] class function for this type that accept [PARAM]
+  /// If [instanceName] != null your class gets registered with that
+  /// name. You will provide value of [instanceName] only when you need to register more
+  /// than one instance of one type.
+  /// ### Example:
+  ///'''dart
   ///    ReflectionClass.registerClassWithParam<TestClassParam,String>((s)
   ///        => TestClassParam(param:s));
-  ///
-  /// if you only use one parameter:
-  ///
-  ///    ReflectionClass.registerClassWithParam<TestClassParam,String>((s)
-  ///        => TestClassParam(param:s);
+  ///'''
   @override
   void registerClassWithParam<T extends Object, PARAM>(
     ClassFuncParam<T, PARAM> classFunc, {
@@ -395,7 +388,7 @@ class _ReflectionClassImplementation implements ReflectionClass {
       }
     }
 
-    final serviceFactory = _ServiceFactory<T, PARAM>(
+    final serviceClass = _ServiceClass<T, PARAM>(
       this,
       registrationScope: _currentScope,
       creationFunction: classFunc,
@@ -407,9 +400,9 @@ class _ReflectionClassImplementation implements ReflectionClass {
 
     factoriesByName.putIfAbsent(
       instanceName,
-      () => <Type, _ServiceFactory<Object, dynamic>>{},
+      () => <Type, _ServiceClass<Object, dynamic>>{},
     );
-    factoriesByName[instanceName]![T] = serviceFactory;
+    factoriesByName[instanceName]![T] = serviceClass;
   }
 
   /// Tests if an [instance] of an object or aType [T] or a name [instanceName]
@@ -439,12 +432,6 @@ class _ReflectionClassImplementation implements ReflectionClass {
         ? _findClassByInstance(instance)
         : _findClassByNameAndType<T>(instanceName);
 
-    throwIf(
-      classToRemove.objectsWaiting.isNotEmpty,
-      StateError(
-          'There are still other objects waiting for this instance so signal ready'),
-    );
-
     classToRemove.registrationScope.factoriesByName[classToRemove.instanceName]!
         .remove(classToRemove.registrationType);
 
@@ -463,20 +450,20 @@ class _ReflectionClassImplementation implements ReflectionClass {
     }
   }
 
-  List<_ServiceFactory> get _allClasses {
-    return _scopes.fold<List<_ServiceFactory>>(
+  List<_ServiceClass> get _allClasses {
+    return _scopes.fold<List<_ServiceClass>>(
       [],
       (sum, x) => sum..addAll(x.allClasses),
     );
   }
 
-  _ServiceFactory? _findFirstClassByInstanceOrNull(Object instance) {
+  _ServiceClass? _findFirstClassByInstanceOrNull(Object instance) {
     final registeredClasses =
         _allClasses.where((x) => identical(x.instance, instance));
     return registeredClasses.isEmpty ? null : registeredClasses.first;
   }
 
-  _ServiceFactory _findClassByInstance(Object instance) {
+  _ServiceClass _findClassByInstance(Object instance) {
     final registeredClass = _findFirstClassByInstanceOrNull(instance);
 
     throwIf(
