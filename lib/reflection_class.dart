@@ -48,7 +48,7 @@ typedef DisposingFunc<T> = FutureOr Function(T param);
 typedef ScopeDisposeFunc = FutureOr Function();
 
 /// Data structure used to identify a dependency by type and instanceName
-class InitDependency extends Type {
+class InitDependency implements Type {
   final Type type;
   final String? instanceName;
 
@@ -111,7 +111,7 @@ class WaitingTimeOutException implements Exception {
 /// You register your object creation factory or an instance of an object with [registerClass]
 /// And retrieve the desired object using [get] or call your locator as function as its a
 /// callable class
-/// Additionally ReflectionClass offers asynchronous creation functions as well as functions to synchronize
+/// Additionally [ReflectionClass] offers asynchronous creation functions as well as functions to synchronize
 /// the async initialization of multiple Singletons
 abstract class ReflectionClass {
   static final ReflectionClass _instance = _ReflectionClassImplementation();
@@ -178,12 +178,8 @@ abstract class ReflectionClass {
   /// than one instance of one type. Its highly not recommended.
   ///
   /// example:
-  ///    ReflectionClass.registerClassWithParam<TestClassParam,String,int>((s,i)
-  ///        => TestClassParam(param:s, param2: i));
   ///
-  /// if you only use one parameter:
-  ///
-  ///    ReflectionClass.registerClassWithParam<TestClassParam,String,void>((s,_)
+  ///    ReflectionClass.registerClassWithParam<TestClassParam,String>((s)
   ///        => TestClassParam(param:s);
   void registerClassWithParam<T extends Object, PARAM>(
     ClassFuncParam<T, PARAM> classFunc, {
