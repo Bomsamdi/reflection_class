@@ -1,0 +1,19 @@
+# .pubignore replaces .gitignore for publishing, so the entries below repeat the
+# ones from .gitignore that must stay out of the archive.
+.idea/
+*.iml
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+/pubspec.lock
+**/doc/api/
+.dart_tool/
+.packages
+build/

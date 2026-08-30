@@ -1,30 +1,43 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:example/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:example/main.dart';
+import 'package:reflection_class/reflection_class.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  setUpAll(() => Reflector.instance.register<Product>(productMirror));
+  tearDownAll(Reflector.instance.clear);
+
+  testWidgets('builds the editor from the mirror', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // One control per declared property, the read-only one included.
+    expect(find.text('name'), findsOneWidget);
+    expect(find.text('price'), findsOneWidget);
+    expect(find.text('inStock'), findsOneWidget);
+    expect(find.text('label'), findsOneWidget);
+    expect(find.text('applyDiscount(10)'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('editing a field writes through the mirror', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+
+    await tester.enterText(find.byType(TextFormField).first, 'Tea');
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.textContaining('Tea'), findsWidgets);
+  });
+
+  testWidgets('calling the method by name changes the value', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+    expect(find.textContaining('42.0'), findsWidgets);
+
+    await tester.tap(find.text('applyDiscount(10)'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('37.8'), findsWidgets);
   });
 }
