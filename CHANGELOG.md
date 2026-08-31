@@ -1,3 +1,10 @@
+## 1.0.1
+
+* Shortened the pubspec description to fit the 180 characters pub.dev indexes.
+  Nothing else changed - the longer version cost the package 10 of its 160
+  analysis points, which `pana` reports as "The package description is too
+  long".
+
 ## 1.0.0
 
 Written from scratch, pure Dart, no dependencies:

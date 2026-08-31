@@ -1,9 +1,8 @@
 name: reflection_class
 description: >-
-  Reach an object's properties and methods by name where Flutter has no
-  dart:mirrors. Declare the members once, then read, write, call and serialise
-  them at run time. No code generation, no dependencies.
-version: 1.0.0
+  Read, write, call and serialise an object's members by name, where Flutter has
+  no dart:mirrors. No code generation, no dependencies.
+version: 1.0.1
 homepage: https://github.com/Bomsamdi/reflection_class
 repository: https://github.com/Bomsamdi/reflection_class
 issue_tracker: https://github.com/Bomsamdi/reflection_class/issues
