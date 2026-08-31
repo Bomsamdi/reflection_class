@@ -3,6 +3,7 @@
 [![Pub Version](https://img.shields.io/pub/v/reflection_class)](https://pub.dev/packages/reflection_class)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![pub points](https://img.shields.io/pub/points/reflection_class)](https://pub.dev/packages/reflection_class/score)
+[![likes](https://img.shields.io/pub/likes/reflection_class)](https://pub.dev/packages/reflection_class/score)
 
 Reach an object's properties and methods **by name**, where Flutter has no
 `dart:mirrors`.
